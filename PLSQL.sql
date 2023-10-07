@@ -98,3 +98,128 @@ BEGIN
     END LOOP;
     RETURN a;
 END;
+
+
+---------------------------------------------------------------------------------------------------------------------------
+-- 1. Change commission percentage for employee with ID = 150 based on salary and experience
+DECLARE
+    v_salary  employees.salary%TYPE;
+    v_exp     NUMBER(2);
+    v_cp      NUMBER(5,2);
+BEGIN
+    SELECT salary, FLOOR((SYSDATE - hire_date) / 365) INTO v_salary, v_exp
+    FROM employees
+    WHERE employee_id = 150;
+
+    IF v_salary > 10000 THEN
+        v_cp := 0.4;
+    ELSIF v_exp > 10 THEN
+        v_cp := 0.35;
+    ELSIF v_salary < 3000 THEN
+        v_cp := 0.25;
+    ELSE
+        v_cp := 0.15;
+    END IF;
+
+    UPDATE employees SET commission_pct = v_cp
+    WHERE employee_id = 150;
+    
+    COMMIT;
+END;
+
+-- 2. Increase the salary of employee 115 based on experience
+DECLARE
+    v_exp  NUMBER(2);
+    v_hike NUMBER(5,2);
+BEGIN
+    SELECT FLOOR((SYSDATE - hire_date) / 365) INTO v_exp
+    FROM employees
+    WHERE employee_id = 115;
+
+    v_hike := 1.05;
+
+    CASE
+        WHEN v_exp > 10 THEN
+            v_hike := 1.20;
+        WHEN v_exp > 5 THEN
+            v_hike := 1.10;
+    END CASE;
+
+    UPDATE employees SET salary = salary * v_hike
+    WHERE employee_id = 115;
+    
+    COMMIT;
+END;
+
+-- 3. Display missing employee IDs
+DECLARE
+     v_min  NUMBER(3);
+     v_max  NUMBER(3);
+     v_c    NUMBER(1);
+BEGIN
+     SELECT MIN(employee_id), MAX(employee_id) INTO v_min, v_max
+     FROM employees;
+
+     FOR i IN v_min + 1 .. v_max - 1
+     LOOP
+           SELECT COUNT(*) INTO v_c
+           FROM employees
+           WHERE employee_id = i;
+
+           IF v_c = 0 THEN
+                DBMS_OUTPUT.PUT_LINE(i);
+           END IF;
+    END LOOP;
+END;
+
+-- 4. Display the year in which maximum number of employees joined along with how many joined in each month in that year
+DECLARE
+      v_year  NUMBER(4);
+      v_c     NUMBER(2);
+BEGIN
+      SELECT TO_CHAR(hire_date, 'yyyy') INTO v_year
+      FROM employees
+      GROUP BY TO_CHAR(hire_date, 'yyyy')
+      HAVING COUNT(*) =
+             (SELECT MAX(COUNT(*))
+               FROM employees
+               GROUP BY TO_CHAR(hire_date, 'yyyy'));
+
+      DBMS_OUTPUT.PUT_LINE('Year : ' || v_year);
+
+      FOR month IN 1 .. 12
+      LOOP
+          SELECT COUNT(*) INTO v_c
+          FROM employees
+          WHERE TO_CHAR(hire_date, 'mm') = month AND TO_CHAR(hire_date, 'yyyy') = v_year;
+
+          DBMS_OUTPUT.PUT_LINE('Month : ' || TO_CHAR(month) || ' Employees : ' || TO_CHAR(v_c));
+     END LOOP;
+END;
+
+-- 5. Create a function that returns the name of the manager of the department
+CREATE OR REPLACE FUNCTION get_dept_manager_name(deptid NUMBER)
+RETURN VARCHAR2 IS
+   v_name  employees.first_name%TYPE;
+BEGIN
+   SELECT first_name INTO v_name
+   FROM employees
+   WHERE employee_id = (SELECT manager_id FROM departments WHERE department_id = deptid);
+
+   RETURN v_name;
+END;
+
+-- 6. Create a procedure that changes the manager ID for the department to the employee with the highest salary
+CREATE OR REPLACE PROCEDURE change_dept_manager(deptid NUMBER) IS
+   v_empid  employees.employee_id%TYPE;
+BEGIN
+   SELECT employee_id INTO v_empid
+   FROM employees
+   WHERE salary = (SELECT MAX(salary) FROM employees WHERE department_id = deptid)
+     AND department_id = deptid;
+
+   UPDATE departments SET manager_id = v_empid
+   WHERE department_id = deptid;
+   
+   COMMIT;
+END;
